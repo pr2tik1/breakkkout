@@ -1,6 +1,9 @@
-import { Player } from './player.js';
-import { Ball } from './ball.js';
-import { Block } from './block.js';
+import { Player } from './components/player.js';
+import { Ball } from './components/ball.js';
+import { EventManager } from './managers/eventManager.js';
+import { CollisionManager } from './managers/collisionManager.js';
+import { ScoreManager } from './managers/scoreManager.js';
+import { BlockFactory } from './components/block.js';
 
 export class Game {
     constructor(boardWidth, boardHeight) {
@@ -21,15 +24,12 @@ export class Game {
         this.blockY = 45;
         this.blockCount = 0;
 
-        this.score = 0;
+        this.scoreManager = new ScoreManager();
+        this.collisionManager = new CollisionManager();
+        this.blockFactory = new BlockFactory();
+        this.eventManager = new EventManager();
+
         this.gameOver = false;
-
-        this.leftPressed = false;
-        this.rightPressed = false;
-
-        this.playerDefaultColor = "lightgreen";
-        this.temporaryColorTimer = null;
-        this.temporaryColorDuration = 250;
 
         this.initializeBoard();
         this.createBlocks();
@@ -45,8 +45,8 @@ export class Game {
     }
 
     addEventListeners() {
-        document.addEventListener("keydown", (e) => this.movePlayer(e));
-        document.addEventListener("keyup", (e) => this.movePlayer(e));
+        this.eventManager.addEventListener("keydown", (e) => this.movePlayer(e));
+        this.eventManager.addEventListener("keyup", (e) => this.movePlayer(e));
     }
 
     update() {
@@ -64,24 +64,22 @@ export class Game {
         this.checkCollisions();
         this.drawBlocks();
 
-        this.drawScore();
+        this.scoreManager.draw(this.context);
     }
 
     handlePlayerMovement() {
-        if (this.leftPressed && !this.outOfBounds(this.player.x - this.player.velocityX)) {
-            this.player.x -= this.player.velocityX;
+        if (this.eventManager.leftPressed && !this.outOfBounds(this.player.x - this.player.velocityX)) {
+            this.player.moveLeft();
         }
-        if (this.rightPressed && !this.outOfBounds(this.player.x + this.player.velocityX)) {
-            this.player.x += this.player.velocityX;
+        if (this.eventManager.rightPressed && !this.outOfBounds(this.player.x + this.player.velocityX)) {
+            this.player.moveRight();
         }
     }
 
     checkCollisions() {
-        if (this.topCollision(this.ball, this.player) || this.bottomCollision(this.ball, this.player)) {
-            this.changePlayerColor("#FFD580");
+        if (this.collisionManager.topCollision(this.ball, this.player) || this.collisionManager.bottomCollision(this.ball, this.player)) {
             this.ball.velocityY *= -1;
-        } else if (this.leftCollision(this.ball, this.player) || this.rightCollision(this.ball, this.player)) {
-            this.changePlayerColor("#FFD580");
+        } else if (this.collisionManager.leftCollision(this.ball, this.player) || this.collisionManager.rightCollision(this.ball, this.player)) {
             this.ball.velocityX *= -1;
         }
 
@@ -90,26 +88,36 @@ export class Game {
         } else if (this.ball.x <= 0 || this.ball.x + this.ball.width >= this.boardWidth) {
             this.ball.velocityX *= -1;
         } else if (this.ball.y + this.ball.height >= this.boardHeight) {
-            this.context.font = "20px sans-serif";
-            this.context.fillText("Game Over: Press 'Space' to Restart", 80, 400);
+            // this.context.font = "20px sans-serif";
+            // this.context.fillText("Game Over: Press 'Space' to Restart", 80, 400);
+            this.showGameOverScreen();
             this.gameOver = true;
         }
 
         for (const block of this.blocks) {
-            if (!block.break && (this.topCollision(this.ball, block) || this.bottomCollision(this.ball, block) || this.leftCollision(this.ball, block) || this.rightCollision(this.ball, block))) {
+            if (!block.break && (this.collisionManager.topCollision(this.ball, block) || this.collisionManager.bottomCollision(this.ball, block) || this.collisionManager.leftCollision(this.ball, block) || this.collisionManager.rightCollision(this.ball, block))) {
                 block.break = true;
                 this.ball.velocityY *= -1;
-                this.score += 100;
+                this.scoreManager.increment(100);
                 this.blockCount -= 1;
             }
         }
 
         if (this.blockCount === 0) {
-            this.score += 100 * this.blockRows * this.blockColumns;
+            this.scoreManager.increment(100 * this.blockRows * this.blockColumns);
             this.blockRows = Math.min(this.blockRows + 1, this.blockMaxRows);
             this.createBlocks();
         }
     }
+
+    showGameOverScreen() {
+        const img = new Image();
+        img.src = '/assets/game-over.png';
+        img.onload = () => {
+            this.context.clearRect(0, 0, this.boardWidth, this.boardHeight);
+            this.context.drawImage(img, (this.boardWidth - img.width) / 2, (this.boardHeight - img.height) / 2);
+        };
+    }   
 
     drawBlocks() {
         for (const block of this.blocks) {
@@ -119,19 +127,8 @@ export class Game {
         }
     }
 
-    drawScore() {
-        this.context.font = "20px sans-serif";
-        this.context.fillText(this.score, 10, 25);
-    }
-
     createBlocks() {
-        this.blocks = [];
-        for (let c = 0; c < this.blockColumns; c++) {
-            for (let r = 0; r < this.blockRows; r++) {
-                const block = new Block(this.blockX + c * this.blockWidth + c * 10, this.blockY + r * this.blockHeight + r * 10, this.blockWidth, this.blockHeight);
-                this.blocks.push(block);
-            }
-        }
+        this.blocks = this.blockFactory.createBlocks(this.blockColumns, this.blockRows, this.blockX, this.blockY, this.blockWidth, this.blockHeight);
         this.blockCount = this.blocks.length;
     }
 
@@ -141,17 +138,9 @@ export class Game {
             return;
         }
         if (e.type === "keydown") {
-            if (e.code === "ArrowLeft") {
-                this.leftPressed = true;
-            } else if (e.code === "ArrowRight") {
-                this.rightPressed = true;
-            }
+            this.eventManager.handleKeyDown(e);
         } else if (e.type === "keyup") {
-            if (e.code === "ArrowLeft") {
-                this.leftPressed = false;
-            } else if (e.code === "ArrowRight") {
-                this.rightPressed = false;
-            }
+            this.eventManager.handleKeyUp(e);
         }
     }
 
@@ -160,46 +149,12 @@ export class Game {
         this.player = new Player(this.boardWidth / 2 - 40, this.boardHeight - 15, 80, 10, 10);
         this.ball = new Ball(this.boardWidth / 2, this.boardHeight / 2, 10, 10, 6, 3, 1);
         this.blockRows = 3;
-        this.score = 0;
+        this.scoreManager.reset();
         this.createBlocks();
-
-        clearTimeout(this.temporaryColorTimer);
-        this.player.color = this.playerDefaultColor;
         this.update();
-    }
-
-    changePlayerColor(color) {
-        this.player.color = color;
-        clearTimeout(this.temporaryColorTimer);
-        this.temporaryColorTimer = setTimeout(() => {
-            this.player.color = this.playerDefaultColor;
-        }, this.temporaryColorDuration);
     }
 
     outOfBounds(xPosition) {
         return xPosition < 0 || xPosition + this.player.width > this.boardWidth;
-    }
-
-    detectCollision(a, b) {
-        return a.x < b.x + b.width &&
-            a.x + a.width > b.x &&
-            a.y < b.y + b.height &&
-            a.y + a.height > b.y;
-    }
-
-    topCollision(ball, block) {
-        return this.detectCollision(ball, block) && (ball.y + ball.height) >= block.y;
-    }
-
-    bottomCollision(ball, block) {
-        return this.detectCollision(ball, block) && (block.y + block.height) >= ball.y;
-    }
-
-    leftCollision(ball, block) {
-        return this.detectCollision(ball, block) && (ball.x + ball.width) >= block.x;
-    }
-
-    rightCollision(ball, block) {
-        return this.detectCollision(ball, block) && (block.x + block.width) >= ball.x;
     }
 }
