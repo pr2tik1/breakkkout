@@ -112,7 +112,7 @@ export class Game {
 
     showGameOverScreen() {
         const img = new Image();
-        img.src = '/assets/game-over.png';
+        img.src = 'https://pr2tik1.github.io/breakkkout/assets/game-over.png';
         img.onload = () => {
             this.context.clearRect(0, 0, this.boardWidth, this.boardHeight);
             this.context.drawImage(img, (this.boardWidth - img.width) / 2, (this.boardHeight - img.height) / 2);
