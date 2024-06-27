@@ -29,7 +29,7 @@ export class Game {
         this.blockFactory = new BlockFactory();
         this.eventManager = new EventManager();
 
-        this.gameOver = false;
+        this.gameOver = true;
 
         this.initializeBoard();
         this.createBlocks();
@@ -42,8 +42,33 @@ export class Game {
         board.height = this.boardHeight;
         board.width = this.boardWidth;
         this.context = board.getContext("2d");
+    
+        const img1 = new Image();
+        const img2 = new Image();
+    
+        img1.src = 'assets/left_right_keys.png';
+        img2.src = 'assets/1.png';
+    
+        let imagesLoaded = 0;
+        const onImageLoad = () => {
+            imagesLoaded += 1;
+            if (imagesLoaded === 2) {
+                this.context.drawImage(img1, (this.boardWidth - img1.width) / 2, 100);
+                this.context.drawImage(img2, (this.boardWidth - img2.width) / 2, 100 + img1.height);
+                document.addEventListener('keydown', this.startGame.bind(this));
+            }
+        };
+    
+        img1.onload = onImageLoad;
+        img2.onload = onImageLoad;
     }
-
+    
+    startGame(e) {
+        if (e.code === "Space" && this.gameOver) {
+            this.resetGame();
+        }
+    }
+    
     addEventListeners() {
         this.eventManager.addEventListener("keydown", (e) => this.movePlayer(e));
         this.eventManager.addEventListener("keyup", (e) => this.movePlayer(e));
